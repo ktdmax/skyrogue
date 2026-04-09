@@ -292,6 +292,29 @@ body::before{
 .pile-hint.active{color:var(--green)}.pile-hint.warn{color:var(--pink)}
 .elim-msg{font-size:.4rem;color:var(--green);text-align:center;min-height:16px;text-shadow:1px 1px 0 rgba(0,0,0,.4)}
 
+/* ── JOHNNY — AI opponent ── */
+.johnny-bar{
+  display:flex;align-items:center;gap:10px;
+  padding:8px 16px;flex-shrink:0;
+  background:linear-gradient(180deg,rgba(180,50,50,.08),transparent);
+  border-bottom:2px solid rgba(180,50,50,.08);
+}
+.johnny-avatar{
+  width:32px;height:32px;display:flex;align-items:center;justify-content:center;
+  background:#3a1515;border:2px solid rgba(255,80,80,.3);
+  font-size:.7rem;color:var(--danger);
+}
+.johnny-name{font-size:.4rem;color:var(--danger);min-width:50px}
+.johnny-grid{display:flex;gap:3px}
+.johnny-cell{
+  width:28px;height:38px;display:flex;align-items:center;justify-content:center;
+  border:2px solid rgba(255,80,80,.15);font-size:.4rem;
+  background:#1a0a0a;
+}
+.johnny-cell.face-up{border-color:rgba(255,80,80,.3)}
+.johnny-score{font-size:.35rem;color:var(--dim);margin-left:auto}
+.johnny-status{font-size:.3rem;color:var(--orange);min-width:80px;text-align:right}
+
 /* end-btn is now in side-panel CSS above */
 
 /* ── FLOATING SCORES ── */
@@ -408,16 +431,25 @@ body::before{
     <!-- RIGHT — Play area -->
     <div class="play-area">
 
-      <!-- Jokers top row -->
+      <!-- Johnny (top-right) -->
+      <div class="johnny-bar">
+        <div class="johnny-avatar">J</div>
+        <div class="johnny-name">Johnny</div>
+        <div class="johnny-grid" id="j-grid"></div>
+        <div class="johnny-score">Score: <span id="j-score">0</span></div>
+        <div class="johnny-status" id="j-status"></div>
+      </div>
+
+      <!-- Jokers -->
       <div class="joker-tray" id="h-jokers"></div>
 
-      <!-- Grid + queue side by side -->
+      <!-- Main play zone: grid + piles -->
       <div class="grid-zone">
         <div class="card-grid" id="g-grid"></div>
 
-        <!-- Deck + Toss Pile (Skyjo style) -->
+        <!-- Piles column -->
         <div class="piles-col">
-          <!-- Toss Pile: face-up, click to take (safe pick) -->
+          <!-- Toss pile (shared with Johnny) -->
           <div class="pile-label">TOSS PILE</div>
           <div class="pile-box pile-toss" id="p-toss" onclick="onTakeToss()" style="cursor:pointer">
             <div class="pile-card" id="p-toss-card"></div>
@@ -425,15 +457,15 @@ body::before{
 
           <div class="pile-or">— or —</div>
 
-          <!-- Deck / Drawn card (same slot, switches between face-down and face-up) -->
+          <!-- Deck / Drawn (flips in place) -->
           <div class="pile-label" id="p-deck-label">DECK</div>
           <div class="pile-box pile-deck" id="p-deck" onclick="onDeckClick()" style="cursor:pointer">
             <div class="pile-card" id="p-deck-card"></div>
           </div>
           <div class="pile-count" id="p-deck-count">120 cards</div>
-          <!-- Skip button (only visible after drawing) -->
+
           <div class="drawn-choice" id="d-skip-area" style="display:none">
-            <button class="btn btn-p btn-s" id="d-btn-skip" onclick="onSkipDrawn()">✕ Skip → Flip</button>
+            <button class="btn btn-p btn-s" id="d-btn-skip" onclick="onSkipDrawn()">✕ Toss it</button>
           </div>
 
           <div class="toss-info">
@@ -1010,6 +1042,10 @@ function startRound(){
   // Seed toss pile with one card
   G.tossTop=G.deck.pop();
 
+  // Johnny's grid (3x2 = 6 cards)
+  G.johnny={grid:[],flip:[],score:0};
+  for(let i=0;i<6;i++){G.johnny.grid[i]=G.deck.pop();G.johnny.flip[i]=i<2} // 2 face-up
+
   const blindType=['small','big','boss'][G.bi];
   if(blindType==='boss'&&!G.jokers.some(j=>j.blockBoss)){
     G.boss=rngChoice(BOSSES);
@@ -1018,7 +1054,82 @@ function startRound(){
     setTimeout(()=>SFX.boss(),200);
   }
 
-  buildGrid();sync();show('S-game');
+  buildGrid();buildJohnnyGrid();sync();show('S-game');
+}
+
+/* ═══ JOHNNY — AI opponent ═══ */
+function buildJohnnyGrid(){
+  const jg=$('j-grid');jg.innerHTML='';
+  for(let i=0;i<6;i++){
+    const c=document.createElement('div');c.className='johnny-cell';c.dataset.i=i;
+    jg.appendChild(c);
+  }
+}
+
+function calcJohnnyScore(){
+  let s=0;
+  for(let i=0;i<6;i++)if(G.johnny.flip[i])s+=modVal(G.johnny.grid[i].v);
+  return s;
+}
+
+function syncJohnny(){
+  const cells=$('j-grid').children;
+  for(let i=0;i<6;i++){
+    const c=cells[i],card=G.johnny.grid[i];
+    if(G.johnny.flip[i]){
+      const dv=modVal(card.v);
+      c.textContent=dv;c.className='johnny-cell face-up';
+      c.style.color=valColor(dv)==='danger'||valColor(dv)==='high'?'var(--danger)':valColor(dv)==='negative'?'var(--blue)':'var(--text)';
+    }else{
+      c.textContent='?';c.className='johnny-cell';c.style.color='';
+    }
+  }
+  G.johnny.score=calcJohnnyScore();
+  $('j-score').textContent=G.johnny.score;
+}
+
+// Johnny takes a turn after the player
+function johnnyTurn(){
+  if(G.over||!G.tossTop)return;
+  const tossVal=G.tossTop.v;
+
+  // Johnny's strategy: take from toss if it improves his worst face-up card
+  let worstIdx=-1,worstVal=-99;
+  for(let i=0;i<6;i++){
+    if(G.johnny.flip[i]&&G.johnny.grid[i].v>worstVal){worstVal=G.johnny.grid[i].v;worstIdx=i}
+  }
+
+  // Take toss if it's better than his worst card (by at least 2 points)
+  if(worstIdx>=0&&tossVal<worstVal-1&&rngChance(.7)){
+    // Johnny takes from toss pile
+    const old=G.johnny.grid[worstIdx];
+    G.johnny.grid[worstIdx]=G.tossTop;
+    G.tossTop=old;
+    $('j-status').textContent='Takes '+modVal(tossVal)+'!';
+    SFX.swap();
+  }else{
+    // Johnny draws from deck and maybe swaps
+    if(!G.deck.length)return;
+    const drawn=G.deck.pop();
+
+    // Find worst face-up card
+    if(worstIdx>=0&&drawn.v<worstVal-1){
+      // Use it
+      const old=G.johnny.grid[worstIdx];
+      G.johnny.grid[worstIdx]=drawn;
+      G.tossTop=old;
+      $('j-status').textContent='Swaps in '+modVal(drawn.v);
+    }else{
+      // Skip: toss drawn card, flip a face-down
+      G.tossTop=drawn;
+      let flipped=false;
+      for(let i=0;i<6;i++){if(!G.johnny.flip[i]){G.johnny.flip[i]=true;flipped=true;break}}
+      $('j-status').textContent=flipped?'Skips, flips':'Skips';
+    }
+    SFX.tick();
+  }
+  setTimeout(()=>$('j-status').textContent='',2000);
+  syncJohnny();sync();
 }
 
 /* Count face-down cards */
@@ -1059,6 +1170,7 @@ function sync(){
   $('h-ante').textContent=G.ante;$('h-discards').textContent=G.discards;$('h-money').textContent=G.money;
   $('q-tosses-left').textContent=G.discards;
   $('h-hidden').textContent=countHidden();
+  if(G.johnny)syncJohnny();
   const seedEl=$('h-seed');seedEl.textContent='Seed: '+G.seed;seedEl.title='Click to copy';seedEl.onclick=()=>{navigator.clipboard.writeText(G.seed).catch(()=>{});seedEl.textContent='Copied!';;setTimeout(()=>seedEl.textContent='Seed: '+G.seed,1000)};
   const bb=$('h-blind');bb.className='sp-block sp-blind '+(blindType==='small'?'sm':blindType==='big'?'bg':'boss');
   bb.textContent=blindType==='small'?'Small Blind':blindType==='big'?'Big Blind':'Boss Blind';
@@ -1235,14 +1347,14 @@ function onDeckClick(){
   }
 }
 
-// B2) Skip the drawn card (goes to toss pile, must flip)
+// B2) Skip/Toss the drawn card (goes to toss pile, must flip a face-down)
 function onSkipDrawn(){
   if(G.phase!=='drawn'||!G.drawn||G.discards<=0)return;
   G.tossTop=G.drawn;G.drawn=null;G.discards--;
   logMove('skip-drawn',{card:G.tossTop});
   SFX.discard();
   if(countHidden()>0){G.phase='flip';sync()}
-  else{G.phase='choose';sync();checkRoundEnd()}
+  else{G.phase='choose';sync();checkRoundEnd();setTimeout(johnnyTurn,400)}
 }
 
 // Click grid card
@@ -1259,7 +1371,7 @@ function onGrid(r,c){
     logMove('swap',{card:G.swapCard,old,pos:[r,c]});
     G.swapCard=null;G.phase='choose';
     SFX.swap();floater($('g-grid').children[r*G.C+c],modVal(old.v),'var(--dim)');
-    sync();setTimeout(()=>{checkLines();checkRoundEnd()},120);
+    sync();setTimeout(()=>{checkLines();checkRoundEnd();setTimeout(johnnyTurn,400)},120);
     return;
   }
 
@@ -1270,7 +1382,7 @@ function onGrid(r,c){
     logMove('flip',{pos:[r,c],card:G.grid[r][c]});
     G.phase='choose';
     SFX.flip();floater($('g-grid').children[r*G.C+c],modVal(G.grid[r][c].v),'var(--yellow)');
-    sync();setTimeout(()=>{checkLines();doChaos();checkRoundEnd()},120);
+    sync();setTimeout(()=>{checkLines();doChaos();checkRoundEnd();setTimeout(johnnyTurn,400)},120);
     return;
   }
 
@@ -1279,7 +1391,7 @@ function onGrid(r,c){
     G.flip[r][c]=true;G.discards--;
     logMove('direct-flip',{pos:[r,c],card:G.grid[r][c]});
     SFX.flip();floater($('g-grid').children[r*G.C+c],modVal(G.grid[r][c].v),'var(--yellow)');
-    sync();setTimeout(()=>{checkLines();doChaos();checkRoundEnd()},120);
+    sync();setTimeout(()=>{checkLines();doChaos();checkRoundEnd();setTimeout(johnnyTurn,400)},120);
     return;
   }
 }
