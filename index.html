@@ -252,20 +252,20 @@ body::before{
 }
 .queue-label{font-size:.35rem;color:var(--dim);text-transform:uppercase;letter-spacing:.1em}
 
-/* Active card — the one you must act on */
+/* Active card — the one you must act on — BIG */
 .queue-active{transition:all .2s}
 .queue-active .pile-card{
-  width:110px;height:154px;display:flex;align-items:center;justify-content:center;
-  font-size:1rem;border:3px solid;position:relative;
-  flex-direction:column;gap:2px;padding:5px;
-  box-shadow:0 0 16px rgba(85,238,119,.15),4px 4px 0 rgba(0,0,0,.4);
+  width:140px;height:196px;display:flex;align-items:center;justify-content:center;
+  font-size:1rem;border:4px solid;position:relative;
+  flex-direction:column;gap:3px;padding:6px;
+  box-shadow:0 0 20px rgba(85,238,119,.15),5px 5px 0 rgba(0,0,0,.4);
   animation:queuePulse 2s ease infinite;
 }
-@keyframes queuePulse{0%,100%{box-shadow:0 0 10px rgba(85,238,119,.1),4px 4px 0 rgba(0,0,0,.4)}50%{box-shadow:0 0 22px rgba(85,238,119,.25),4px 4px 0 rgba(0,0,0,.4)}}
+@keyframes queuePulse{0%,100%{box-shadow:0 0 12px rgba(85,238,119,.1),5px 5px 0 rgba(0,0,0,.4)}50%{box-shadow:0 0 26px rgba(85,238,119,.25),5px 5px 0 rgba(0,0,0,.4)}}
 
-/* Actions below active card */
-.queue-actions{display:flex;gap:6px;width:100%}
-.queue-actions .btn{flex:1;text-align:center}
+/* Actions below active card — stacked, full width, big */
+.queue-actions{display:flex;flex-direction:column;gap:6px;width:140px}
+.queue-actions .btn{width:100%;text-align:center;padding:10px 14px;font-size:.5rem}
 .queue-hint{
   font-family:'Chakra Petch',sans-serif;font-size:.55rem;color:var(--dim);
   text-align:center;line-height:1.3;min-height:20px;max-width:120px;
@@ -1093,7 +1093,7 @@ function sync(){
   const ac=$('q-active-card');
   if(G.queue.length>0&&!G.over){
     const card=G.queue[0],dv=modVal(card.v),ch=CC[String(card.v)]||{},isBig=card.v>=10||card.v<0;
-    ac.innerHTML=`<img style="position:absolute;top:4px;left:5px;width:16px;height:16px;image-rendering:pixelated;opacity:.5" src="${SPRITE_CACHE['suit_'+card.s]||''}"><img style="width:${isBig?'52px':'22px'};height:${isBig?'52px':'22px'};image-rendering:pixelated" src="${SPRITE_CACHE['card_'+card.v]||''}"><span style="font-size:${isBig?'.6rem':'1.8rem'};font-weight:700;text-shadow:2px 2px 0 rgba(0,0,0,.5)">${dv}</span><span style="font-size:.26rem;opacity:.5">${ch.n||''}</span>`;
+    ac.innerHTML=`<img style="position:absolute;top:6px;left:7px;width:20px;height:20px;image-rendering:pixelated;opacity:.5" src="${SPRITE_CACHE['suit_'+card.s]||''}"><img style="width:${isBig?'70px':'28px'};height:${isBig?'70px':'28px'};image-rendering:pixelated" src="${SPRITE_CACHE['card_'+card.v]||''}"><span style="font-size:${isBig?'.8rem':'2.4rem'};font-weight:700;text-shadow:3px 3px 0 rgba(0,0,0,.5)">${dv}</span><span style="font-size:.32rem;opacity:.5">${ch.n||''}</span>`;
     ac.className='pile-card '+valColor(dv);ac.style.borderColor='currentColor';
   }else{
     ac.innerHTML='';ac.className='pile-card';ac.style.borderColor='';
