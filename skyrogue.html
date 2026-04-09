@@ -1316,32 +1316,22 @@ function checkLines(){
   }
 
   for(const line of lines){
-    // Build runs of CONTIGUOUS flipped, non-eliminated cells
-    const runs=[];let cur=[];
-    for(const [r,c] of line){
-      if(G.flip[r][c]&&!G.elim[r][c]){cur.push([r,c])}
-      else{if(cur.length>=3)runs.push(cur);cur=[];}
-    }
-    if(cur.length>=3)runs.push(cur);
+    // ALL cells in the line must be flipped and not eliminated
+    const allReady=line.every(([r,c])=>G.flip[r][c]&&!G.elim[r][c]);
+    if(!allReady)continue;
 
-    for(const run of runs){
-      // Check windows of 3 within each contiguous run
-      for(let start=0;start<=run.length-3;start++){
-        const win=run.slice(start,start+3);
-        const cards=win.map(([r,c])=>G.grid[r][c]);
-        const vals=cards.map(cd=>cd.v);
+    const cards=line.map(([r,c])=>G.grid[r][c]);
+    const vals=cards.map(cd=>cd.v);
 
-        let matched=false;
-        // Triple: all same value
-        if(vals[0]===vals[1]&&vals[1]===vals[2]) matched=true;
-        // Straight: 3 consecutive values
-        const sorted=[...vals].sort((a,b)=>a-b);
-        if(!matched && sorted[1]===sorted[0]+1 && sorted[2]===sorted[1]+1) matched=true;
+    let matched=false;
+    // All same value (full line)
+    if(vals.every(v=>v===vals[0])) matched=true;
+    // Full straight (all consecutive)
+    const sorted=[...vals].sort((a,b)=>a-b);
+    if(!matched && sorted.every((v,i)=>i===0||v===sorted[i-1]+1)) matched=true;
 
-        if(matched){
-          for(const [r,c] of win) toElim.add(r+','+c);
-        }
-      }
+    if(matched){
+      for(const [r,c] of line) toElim.add(r+','+c);
     }
   }
 
