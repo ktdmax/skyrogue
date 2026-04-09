@@ -276,16 +276,7 @@ body::before{
 .pile-deck .pile-card::after{inset:-1px;top:6px;left:6px;right:-6px;bottom:-6px;opacity:.5}
 .pile-count{font-size:.3rem;color:var(--green);margin-top:2px}
 
-/* Drawn card area (shown after blind draw) */
-.drawn-area{display:flex;flex-direction:column;align-items:center;gap:6px;margin-top:4px}
-.pile-drawn .pile-card{
-  width:120px;height:168px;display:flex;align-items:center;justify-content:center;
-  border:4px solid;position:relative;flex-direction:column;gap:2px;padding:5px;
-  box-shadow:0 0 16px rgba(85,238,119,.15),4px 4px 0 rgba(0,0,0,.4);
-}
-.drawn-choice{display:flex;flex-direction:column;align-items:center;gap:4px}
-.drawn-choice-label{font-size:.3rem;color:var(--dim)}
-.pile-drawn:hover .pile-card{border-color:var(--green)!important;box-shadow:0 0 20px rgba(85,238,119,.2),4px 4px 0 rgba(0,0,0,.4)!important}
+.drawn-choice{display:flex;flex-direction:column;align-items:center;gap:4px;margin-top:4px}
 .toss-info{display:flex;align-items:center;gap:6px;margin-top:6px;padding:4px 10px;border:2px solid rgba(255,170,85,.15);background:rgba(255,170,85,.04)}
 .toss-info-label{font-size:.3rem;color:var(--dim);text-transform:uppercase}
 .toss-info-num{font-size:1rem;color:var(--orange);text-shadow:2px 2px 0 rgba(0,0,0,.4)}
@@ -434,22 +425,15 @@ body::before{
 
           <div class="pile-or">— or —</div>
 
-          <!-- Deck: face-down, click to draw blind -->
-          <div class="pile-label">DECK</div>
-          <div class="pile-box pile-deck" id="p-deck" onclick="onDrawDeck()" style="cursor:pointer">
+          <!-- Deck / Drawn card (same slot, switches between face-down and face-up) -->
+          <div class="pile-label" id="p-deck-label">DECK</div>
+          <div class="pile-box pile-deck" id="p-deck" onclick="onDeckClick()" style="cursor:pointer">
             <div class="pile-card" id="p-deck-card"></div>
-            <div class="pile-count" id="p-deck-count">120</div>
           </div>
-
-          <!-- Drawn card (appears after drawing blind) -->
-          <div class="drawn-area" id="d-drawn" style="display:none">
-            <div class="pile-box pile-drawn" id="p-drawn" onclick="onUseDrawn()" style="cursor:pointer">
-              <div class="pile-card" id="p-drawn-card"></div>
-            </div>
-            <div class="drawn-choice">
-              <span class="drawn-choice-label">Click card to use, or:</span>
-              <button class="btn btn-p btn-s" id="d-btn-skip" onclick="onSkipDrawn()">✕ Skip → Flip</button>
-            </div>
+          <div class="pile-count" id="p-deck-count">120 cards</div>
+          <!-- Skip button (only visible after drawing) -->
+          <div class="drawn-choice" id="d-skip-area" style="display:none">
+            <button class="btn btn-p btn-s" id="d-btn-skip" onclick="onSkipDrawn()">✕ Skip → Flip</button>
           </div>
 
           <div class="toss-info">
@@ -1136,23 +1120,30 @@ function sync(){
   toss.style.pointerEvents=(G.phase==='choose'&&G.tossTop)?'auto':'none';
   toss.style.opacity=(G.phase==='choose'&&G.tossTop)?'1':'.4';
 
-  // ── Deck (click to draw blind) ──
-  const dk=$('p-deck');
-  dk.style.pointerEvents=(G.phase==='choose'&&G.deck.length)?'auto':'none';
-  dk.style.opacity=(G.phase==='choose'&&G.deck.length)?'1':'.4';
-  $('p-deck-card').innerHTML=`<img style="width:32px;height:32px;image-rendering:pixelated;opacity:.3" src="${SPRITE_CACHE['back']||''}">`;
-  $('p-deck-count').textContent=G.deck.length+' cards';
+  // ── Deck / Drawn (same slot) ──
+  const dk=$('p-deck'),dkCard=$('p-deck-card'),dkLabel=$('p-deck-label');
+  const skipArea=$('d-skip-area');
 
-  // ── Drawn card (shown after blind draw) ──
-  const da=$('d-drawn');
   if(G.phase==='drawn'&&G.drawn){
-    da.style.display='flex';
+    // Show drawn card face-up in the deck slot
     const dv=modVal(G.drawn.v),dBig=G.drawn.v>=10||G.drawn.v<0;
-    $('p-drawn-card').innerHTML=renderCard(G.drawn,dBig);
-    $('p-drawn-card').className='pile-card '+valColor(dv);
-    $('p-drawn-card').style.borderColor='currentColor';
+    dkCard.innerHTML=renderCard(G.drawn,dBig);
+    dkCard.className='pile-card '+valColor(dv);dkCard.style.borderColor='currentColor';
+    dkLabel.textContent='DRAWN — click to use';
+    dk.style.pointerEvents='auto';dk.style.opacity='1';
+    $('p-deck-count').textContent='';
+    skipArea.style.display='flex';
     $('d-btn-skip').disabled=G.discards<=0;
-  }else{da.style.display='none'}
+  }else{
+    // Show face-down deck
+    dkCard.innerHTML=`<img style="width:32px;height:32px;image-rendering:pixelated;opacity:.3" src="${SPRITE_CACHE['back']||''}">`;
+    dkCard.className='pile-card';dkCard.style.borderColor='';
+    dkLabel.textContent='DECK';
+    dk.style.pointerEvents=(G.phase==='choose'&&G.deck.length)?'auto':'none';
+    dk.style.opacity=(G.phase==='choose'&&G.deck.length)?'1':'.4';
+    $('p-deck-count').textContent=G.deck.length+' cards';
+    skipArea.style.display='none';
+  }
 
   $('q-tosses-left').textContent=G.discards;
   $('d-end').disabled=G.phase!=='choose';
@@ -1224,22 +1215,24 @@ function onTakeToss(){
   SFX.draw();sync();
 }
 
-// B) Draw from deck (blind → see card → decide)
-function onDrawDeck(){
-  if(G.phase!=='choose'||!G.deck.length)return;
-  G.drawn=G.deck.pop();
-  G.phase='drawn';
-  logMove('draw-deck',{card:G.drawn});
-  SFX.draw();sync();
-}
-
-// B1) Use the drawn card (swap into grid)
-function onUseDrawn(){
-  if(G.phase!=='drawn'||!G.drawn)return;
-  G.swapCard=G.drawn;G.drawn=null;
-  G.phase='swap';
-  logMove('use-drawn',{card:G.swapCard});
-  SFX.draw();sync();
+// B) Deck click — draws blind OR uses drawn card
+function onDeckClick(){
+  // If in choose phase: draw blind
+  if(G.phase==='choose'&&G.deck.length){
+    G.drawn=G.deck.pop();
+    G.phase='drawn';
+    logMove('draw-deck',{card:G.drawn});
+    SFX.draw();sync();
+    return;
+  }
+  // If in drawn phase: use the drawn card (click = take)
+  if(G.phase==='drawn'&&G.drawn){
+    G.swapCard=G.drawn;G.drawn=null;
+    G.phase='swap';
+    logMove('use-drawn',{card:G.swapCard});
+    SFX.draw();sync();
+    return;
+  }
 }
 
 // B2) Skip the drawn card (goes to toss pile, must flip)
