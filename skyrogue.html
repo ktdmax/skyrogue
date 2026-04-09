@@ -283,12 +283,12 @@ body::before{
   border:4px solid;position:relative;flex-direction:column;gap:2px;padding:5px;
   box-shadow:0 0 16px rgba(85,238,119,.15),4px 4px 0 rgba(0,0,0,.4);
 }
-.drawn-btns{display:flex;flex-direction:column;gap:6px;align-items:center;width:140px}
-.toss-row{display:flex;align-items:center;gap:8px;width:140px}
-.toss-row .btn{flex:1}
-.toss-counter{text-align:center;min-width:36px}
-.toss-counter span{font-size:1.2rem;color:var(--orange);text-shadow:2px 2px 0 rgba(0,0,0,.4)}
-.toss-counter-label{font-size:.25rem;color:var(--dim);text-transform:uppercase}
+.drawn-choice{display:flex;flex-direction:column;align-items:center;gap:4px}
+.drawn-choice-label{font-size:.3rem;color:var(--dim)}
+.pile-drawn:hover .pile-card{border-color:var(--green)!important;box-shadow:0 0 20px rgba(85,238,119,.2),4px 4px 0 rgba(0,0,0,.4)!important}
+.toss-info{display:flex;align-items:center;gap:6px;margin-top:6px;padding:4px 10px;border:2px solid rgba(255,170,85,.15);background:rgba(255,170,85,.04)}
+.toss-info-label{font-size:.3rem;color:var(--dim);text-transform:uppercase}
+.toss-info-num{font-size:1rem;color:var(--orange);text-shadow:2px 2px 0 rgba(0,0,0,.4)}
 
 .pile-box.selected .pile-card{
   border-color:var(--green)!important;
@@ -443,17 +443,18 @@ body::before{
 
           <!-- Drawn card (appears after drawing blind) -->
           <div class="drawn-area" id="d-drawn" style="display:none">
-            <div class="pile-label">DRAWN</div>
-            <div class="pile-box pile-drawn" id="p-drawn">
+            <div class="pile-box pile-drawn" id="p-drawn" onclick="onUseDrawn()" style="cursor:pointer">
               <div class="pile-card" id="p-drawn-card"></div>
             </div>
-            <div class="drawn-btns">
-              <button class="btn btn-g" id="d-btn-use" onclick="onUseDrawn()" style="width:140px">↙ Use it</button>
-              <div class="toss-row">
-                <button class="btn btn-p" id="d-btn-skip" onclick="onSkipDrawn()">✕ Skip</button>
-                <div class="toss-counter"><span id="q-tosses-left">5</span><div class="toss-counter-label">left</div></div>
-              </div>
+            <div class="drawn-choice">
+              <span class="drawn-choice-label">Click card to use, or:</span>
+              <button class="btn btn-p btn-s" id="d-btn-skip" onclick="onSkipDrawn()">✕ Skip → Flip</button>
             </div>
+          </div>
+
+          <div class="toss-info">
+            <span class="toss-info-label">Skips</span>
+            <span class="toss-info-num" id="q-tosses-left">5</span>
           </div>
 
           <div class="pile-hint" id="p-hint"></div>
@@ -1117,6 +1118,7 @@ function sync(){
     if(!G.elim[r][c]){
       if(G.phase==='swap') el.classList.add('can-click');
       else if(G.phase==='flip'){if(!G.flip[r][c])el.classList.add('can-click','can-click-flip');else el.classList.add('dimmed')}
+      else if(G.phase==='choose'&&!G.flip[r][c]&&G.discards>0) el.classList.add('can-click','can-click-flip');
     }
   }
 
@@ -1149,7 +1151,6 @@ function sync(){
     $('p-drawn-card').innerHTML=renderCard(G.drawn,dBig);
     $('p-drawn-card').className='pile-card '+valColor(dv);
     $('p-drawn-card').style.borderColor='currentColor';
-    $('d-btn-use').disabled=false;
     $('d-btn-skip').disabled=G.discards<=0;
   }else{da.style.display='none'}
 
@@ -1258,8 +1259,10 @@ function onGrid(r,c){
   // Swap mode: place card on grid
   if(G.phase==='swap'&&G.swapCard){
     const old=G.grid[r][c];
+    const wasFlipped=G.flip[r][c];
     G.grid[r][c]=G.swapCard;G.flip[r][c]=true;
-    G.tossTop=old; // swapped-out card goes face-up on toss pile
+    // Only face-up swapped cards go to toss pile
+    if(wasFlipped) G.tossTop=old;
     logMove('swap',{card:G.swapCard,old,pos:[r,c]});
     G.swapCard=null;G.phase='choose';
     SFX.swap();floater($('g-grid').children[r*G.C+c],modVal(old.v),'var(--dim)');
@@ -1273,6 +1276,15 @@ function onGrid(r,c){
     G.flip[r][c]=true;
     logMove('flip',{pos:[r,c],card:G.grid[r][c]});
     G.phase='choose';
+    SFX.flip();floater($('g-grid').children[r*G.C+c],modVal(G.grid[r][c].v),'var(--yellow)');
+    sync();setTimeout(()=>{checkLines();doChaos();checkRoundEnd()},120);
+    return;
+  }
+
+  // Direct flip in choose phase (costs 1 toss)
+  if(G.phase==='choose'&&!G.flip[r][c]&&G.discards>0){
+    G.flip[r][c]=true;G.discards--;
+    logMove('direct-flip',{pos:[r,c],card:G.grid[r][c]});
     SFX.flip();floater($('g-grid').children[r*G.C+c],modVal(G.grid[r][c].v),'var(--yellow)');
     sync();setTimeout(()=>{checkLines();doChaos();checkRoundEnd()},120);
     return;
