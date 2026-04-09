@@ -62,6 +62,17 @@ body::before{
 .rules{max-width:460px;color:var(--dim);font-family:'Chakra Petch',sans-serif;font-size:.78rem;line-height:1.6;padding:14px 18px;border:3px solid rgba(255,255,255,.06);background:rgba(255,255,255,.02);text-align:left}
 .rules h3{font-family:var(--px);color:var(--blue);font-size:.5rem;margin-bottom:8px;text-transform:uppercase;text-align:center}
 .rules ol{padding-left:16px}.rules li{margin-bottom:4px}.rules strong{color:var(--text)}
+/* Seed input on title */
+.seed-box{display:flex;align-items:center;gap:8px}
+.seed-label{font-size:.4rem;color:var(--dim);text-transform:uppercase}
+.seed-input{
+  font-family:var(--px);font-size:.45rem;color:var(--green);
+  background:rgba(0,0,0,.4);border:2px solid rgba(85,238,119,.2);
+  padding:6px 10px;width:200px;text-transform:uppercase;
+  outline:none;
+}
+.seed-input:focus{border-color:var(--green)}
+.seed-input::placeholder{color:var(--dim);font-size:.35rem;text-transform:none}
 
 /* ══════════════════════════════════════
    GAME SCREEN — Balatro Full-Width
@@ -124,6 +135,8 @@ body::before{
   background:rgba(170,102,255,.06);display:none;line-height:1.3;
 }
 .sp-boss.on{display:block}
+.sp-seed{padding:6px 14px;font-size:.3rem;color:var(--dim);text-align:center;cursor:pointer;border-bottom:2px solid rgba(255,255,255,.04)}
+.sp-seed:hover{color:var(--green)}
 
 .side-panel .end-btn{
   margin:auto 14px 14px;
@@ -382,6 +395,10 @@ body::before{
     Goal: keep yer score <strong>at or below the target</strong>.<br>
     Buy <strong>Jokers</strong> at the Black Market. Survive the <strong>Boss blinds</strong>, ye scurvy dog.
   </div>
+  <div class="seed-box">
+    <label class="seed-label">Seed</label>
+    <input class="seed-input" id="seed-input" type="text" placeholder="Leave empty for random" spellcheck="false">
+  </div>
   <button class="btn" onclick="startGame()">Play</button>
 </div>
 
@@ -410,6 +427,7 @@ body::before{
         <div class="sp-row"><span class="sp-al">Ante</span><span class="sp-av" style="font-size:.7rem" id="h-ante">1</span></div>
       </div>
       <div class="sp-boss" id="h-boss"></div>
+      <div class="sp-seed" id="h-seed"></div>
       <button class="end-btn" id="d-end" onclick="doEndRound()">End Round</button>
     </div>
 
@@ -938,6 +956,23 @@ function genBackground(){
 SPRITE_CACHE['bg']=genBackground();
 document.getElementById('S-title').style.backgroundImage='url('+SPRITE_CACHE['bg']+')';
 
+/* ═══ SEEDED PRNG — Mulberry32 (deterministic runs) ═══ */
+let _seed=0;
+function seedRng(s){_seed=s|0}
+function rng(){_seed|=0;_seed=_seed+0x6D2B79F5|0;let t=Math.imul(_seed^_seed>>>15,1|_seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;}
+// Seeded versions of common random operations
+function rngInt(a,b){return a+Math.floor(rng()*(b-a))}
+function rngChoice(arr){return arr[Math.floor(rng()*arr.length)]}
+function rngChance(p){return rng()<p}
+// Generate a readable seed string like Balatro (e.g. "SKULL-7F3A")
+function makeSeedStr(){
+  const words=['SKULL','GROG','PLANK','KRAKEN','PARROT','DEVIL','VOID','GHOST','MONKEY','CANNON','MAP','DOLL','CURSE','PIRATE','TENTACLE'];
+  const w=words[Math.floor(Math.random()*words.length)];
+  const hex=Math.floor(Math.random()*0xFFFF).toString(16).toUpperCase().padStart(4,'0');
+  return w+'-'+hex;
+}
+function seedFromStr(s){let h=0;for(let i=0;i<s.length;i++){h=((h<<5)-h)+s.charCodeAt(i);h|=0;}return h}
+
 let G={};
 const $=id=>document.getElementById(id);
 function show(id){document.querySelectorAll('.scr').forEach(s=>s.classList.remove('on'));$(id).classList.add('on')}
@@ -952,14 +987,18 @@ function posDrawnSlot(){/* no-op, drawn slot is in normal flow now */}
   'discard-flip' → Discarded drawn card. Pick a face-down card to flip.
 */
 
-function startGame(){
+function startGame(customSeed){
   SFX.start();
+  // Seed system
+  const seedInput=$('seed-input');
+  const seedStr=customSeed||(seedInput&&seedInput.value.trim())||makeSeedStr();
+  seedRng(seedFromStr(seedStr));
   // Set background and draw pile pixel art
   document.querySelector('.play-area').style.backgroundImage='url('+SPRITE_CACHE['bg']+')';
   const dpc=$('d-draw-card');
   dpc.innerHTML=`<img style="width:28px;height:28px;image-rendering:pixelated;opacity:.4" src="${SPRITE_CACHE['back']||''}">`;
   G={ante:1,bi:0,money:4,jokers:[],maxJ:MAX_JOKERS,vouchers:[],won:0,discount:0,cq:[],
-     history:[] /* move history for future bot/replay */};
+     history:[],seed:seedStr};
   startRound();
 }
 
@@ -989,7 +1028,7 @@ function startRound(){
 
   const blindType=['small','big','boss'][G.bi];
   if(blindType==='boss'&&!G.jokers.some(j=>j.blockBoss)){
-    G.boss=BOSSES[Math.floor(Math.random()*BOSSES.length)];
+    G.boss=rngChoice(BOSSES);
     if(G.boss.fx==='rush'){G.hands=Math.max(2,G.hands-1);G.discards=Math.max(0,G.discards-1)}
     if(G.boss.fx==='tax')G.soff=8;
     setTimeout(()=>SFX.boss(),200);
@@ -1022,6 +1061,7 @@ function buildGrid(){
 function sync(){
   const blindType=['small','big','boss'][G.bi];
   $('h-ante').textContent=G.ante;$('h-hands').textContent=G.hands;$('h-discards').textContent=G.discards;$('h-money').textContent=G.money;
+  const seedEl=$('h-seed');seedEl.textContent='Seed: '+G.seed;seedEl.title='Click to copy';seedEl.onclick=()=>{navigator.clipboard.writeText(G.seed).catch(()=>{});seedEl.textContent='Copied!';;setTimeout(()=>seedEl.textContent='Seed: '+G.seed,1000)};
   const bb=$('h-blind');bb.className='sp-block sp-blind '+(blindType==='small'?'sm':blindType==='big'?'bg':'boss');
   bb.textContent=blindType==='small'?'Small Blind':blindType==='big'?'Big Blind':'Boss Blind';
 
@@ -1348,16 +1388,16 @@ function resolve(){
     $('r-details').innerHTML=`Score: <span class="sv">${sc}</span> / Target: <span class="tv">≤${G.target}</span>`;
     $('r-bonus').textContent=`+$${bonus} doubloons`;const btn=$('r-btn');btn.textContent='To the Black Market';btn.onclick=()=>openShop();
   }else{SFX.lose();$('S-game').classList.add('shake');setTimeout(()=>$('S-game').classList.remove('shake'),400);
-    setTimeout(()=>{show('S-over');$('go-stats').innerHTML=`Final Score: <span style="color:var(--danger);font-family:'Press Start 2P',monospace">${sc}</span> (needed ≤${G.target})<br>Ante ${G.ante} · Round ${G.won+1}<br>$${G.money} earned · ${G.jokers.length} Jokers`},700);
+    setTimeout(()=>{show('S-over');$('go-stats').innerHTML=`Final Score: <span style="color:var(--danger);font-family:'Press Start 2P',monospace">${sc}</span> (needed ≤${G.target})<br>Ante ${G.ante} · Round ${G.won+1}<br>$${G.money} earned · ${G.jokers.length} Jokers<br><span style="font-size:.6rem;color:var(--dim)">Seed: ${G.seed}</span>`},700);
   }
 }
 
 function openShop(){SFX.shop();show('S-shop');$('s-money').textContent=G.money;$('s-msg').innerHTML='&nbsp;';
   const cont=$('s-items');cont.innerHTML='';const items=[];
   const avail=JOKERS.filter(j=>!G.jokers.some(gj=>gj.id===j.id));shuffle(avail);
-  for(let i=0;i<Math.min(2+(Math.random()<.4?1:0),avail.length);i++)items.push({...avail[i],type:'joker'});
-  items.push({...CONSUMABLES[Math.floor(Math.random()*CONSUMABLES.length)]});
-  if(Math.random()<.4){const vs=VOUCHERS.filter(v=>!G.vouchers.includes(v.id));if(vs.length)items.push({...vs[Math.floor(Math.random()*vs.length)]})}
+  for(let i=0;i<Math.min(2+(rngChance(.4)?1:0),avail.length);i++)items.push({...avail[i],type:'joker'});
+  items.push({...rngChoice(CONSUMABLES)});
+  if(rngChance(.4)){const vs=VOUCHERS.filter(v=>!G.vouchers.includes(v.id));if(vs.length)items.push({...rngChoice(vs)})}
   for(const item of items){const price=Math.max(1,item.price-(G.discount||0));
     const card=document.createElement('div');card.className='shop-card'+(G.money<price?' broke':'');
     card.innerHTML=`<div class="itype ${item.type||'joker'}">${(item.type||'joker').toUpperCase()}</div><div class="iicon">${item.icon}</div><div class="iname">${item.name}</div><div class="idesc">${item.desc}</div><div class="iprice">$${price}</div>`;
@@ -1377,7 +1417,7 @@ function buyItem(item,price,el){
 
 function leaveShop(){G.bi++;if(G.bi>2){G.bi=0;G.ante++;if(G.ante>ANTES.length){show('S-result');$('r-title').className='rtitle win';$('r-title').textContent='YOU WIN!';$('r-details').innerHTML=`All ${ANTES.length} antes survived!<br>$${G.money} · ${G.jokers.length} Jokers`;$('r-bonus').textContent='Congratulations, Rogue!';$('r-btn').textContent='Play Again';$('r-btn').onclick=()=>location.reload();return}}startRound()}
 
-function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
 function floater(el,text,color){if(!el)return;const r=el.getBoundingClientRect();const f=document.createElement('div');f.className='floater';f.textContent=text;f.style.left=r.left+r.width/2-20+'px';f.style.top=r.top-8+'px';f.style.color=color;document.body.appendChild(f);setTimeout(()=>f.remove(),1200)}
 
 /* Reposition drawn slot on resize */
