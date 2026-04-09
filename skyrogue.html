@@ -252,8 +252,10 @@ body::before{
 }
 .queue-label{font-size:.35rem;color:var(--dim);text-transform:uppercase;letter-spacing:.1em}
 
-/* Active card — the one you must act on — BIG */
+/* Active card — the one you must act on — BIG + clickable */
 .queue-active{transition:all .2s}
+.queue-active:hover .pile-card{border-color:var(--green)!important;box-shadow:0 0 24px rgba(85,238,119,.25),5px 5px 0 rgba(0,0,0,.4)!important}
+.queue-toss:hover .pile-card{border-color:var(--green)!important;box-shadow:0 0 20px rgba(85,238,119,.2),4px 4px 0 rgba(0,0,0,.4)!important}
 .queue-active .pile-card{
   width:140px;height:196px;display:flex;align-items:center;justify-content:center;
   font-size:1rem;border:4px solid;position:relative;
@@ -438,17 +440,15 @@ body::before{
         <div class="queue-col">
           <!-- Queue: incoming face-up card -->
           <div class="queue-label">INCOMING</div>
-          <div class="queue-card queue-active" id="q-active">
+          <div class="queue-card queue-active" id="q-active" onclick="onTakeQueue()" style="cursor:pointer">
             <div class="pile-card" id="q-active-card"></div>
           </div>
-          <button class="btn btn-g" id="q-btn-take" onclick="onTakeQueue()" style="width:140px">↙ Take</button>
 
           <!-- Toss pile: last discarded card, face-up -->
-          <div class="queue-label" style="margin-top:10px">TOSS PILE</div>
-          <div class="queue-card queue-toss" id="q-toss">
+          <div class="queue-label" style="margin-top:10px">TOSS PILE <span style="font-size:.25rem;color:var(--dim)">(click to take)</span></div>
+          <div class="queue-card queue-toss" id="q-toss" onclick="onTakeToss()" style="cursor:pointer">
             <div class="pile-card" id="q-toss-card"></div>
           </div>
-          <button class="btn btn-s" id="q-btn-take-toss" onclick="onTakeToss()" style="width:140px">↙ Take Toss</button>
 
           <div class="queue-sep"></div>
           <div class="toss-row">
@@ -1151,9 +1151,13 @@ function sync(){
   // Buttons
   const isOffer=G.phase==='offer'&&!G.over;
   const hasQueue=G.queue.length>0;
-  $('q-btn-take').disabled=!(isOffer&&hasQueue);
-  $('q-btn-take-toss').disabled=!(isOffer&&G.tossTop);
+  // Toss button
   $('q-btn-toss').disabled=!(isOffer&&hasQueue&&G.discards>0);
+  // Clickability of cards (visual feedback via CSS, actual guard in functions)
+  $('q-active').style.pointerEvents=(isOffer&&hasQueue)?'auto':'none';
+  $('q-active').style.opacity=(isOffer&&hasQueue)?'1':'.3';
+  $('q-toss').style.pointerEvents=(isOffer&&G.tossTop)?'auto':'none';
+  $('q-toss').style.opacity=G.tossTop?'1':'.3';
 
   // Highlight selected pile
   $('q-active').classList.toggle('selected',G.phase==='swap-queue');
@@ -1172,8 +1176,11 @@ function sync(){
   // Hint
   const hint=$('q-hint');hint.className='queue-hint';
   if(G.phase==='offer'){
-    if(!G.queue.length||G.over)hint.textContent='';
-    else hint.textContent=G.tossTop?'Take, Take Toss, or Toss?':'Take or Toss?';
+    if(G.over||(!G.queue.length&&!G.tossTop))hint.textContent='';
+    else if(G.queue.length&&G.tossTop)hint.textContent='Click a card to take, or Toss';
+    else if(G.queue.length)hint.textContent='Click to take, or Toss';
+    else if(G.tossTop)hint.textContent='Click toss pile to take';
+    else hint.textContent='';
   }else if(G.phase==='swap-queue'||G.phase==='swap-toss'){
     hint.textContent='Click a grid card';hint.classList.add('active');
   }else if(G.phase==='flip'){
