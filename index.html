@@ -1213,7 +1213,6 @@ function sync(){
     if(!G.elim[r][c]){
       if(G.phase==='swap'||G.phase==='drawn') el.classList.add('can-click');
       else if(G.phase==='flip'){if(!G.flip[r][c])el.classList.add('can-click','can-click-flip');else el.classList.add('dimmed')}
-      else if(G.phase==='choose'&&!G.flip[r][c]&&G.discards>0) el.classList.add('can-click','can-click-flip');
     }
   }
 
@@ -1402,14 +1401,7 @@ function onGrid(r,c){
     return;
   }
 
-  // Direct flip in choose phase (costs 1 toss)
-  if(G.phase==='choose'&&!G.flip[r][c]&&G.discards>0){
-    G.flip[r][c]=true;G.discards--;
-    logMove('direct-flip',{pos:[r,c],card:G.grid[r][c]});
-    SFX.flip();floater($('g-grid').children[r*G.C+c],modVal(G.grid[r][c].v),'var(--yellow)');
-    sync();setTimeout(()=>{checkLines();doChaos();checkRoundEnd();setTimeout(johnnyTurn,400)},120);
-    return;
-  }
+  // No direct flip — must take from toss or draw from deck first
 }
 
 /* ═══ ELIMINATION — checks rows AND columns for: triple values, straights, shape match ═══ */
