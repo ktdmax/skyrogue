@@ -195,7 +195,7 @@ body::before{
   transform-style:preserve-3d;transition:transform .4s ease,opacity .4s,filter .15s;
 }
 .card.flipped{transform:rotateY(180deg)}
-.card.eliminated{opacity:0;visibility:hidden;pointer-events:none;transition:opacity .5s}
+.card.eliminated{opacity:0;pointer-events:none;transition:opacity .4s}
 .card.can-click{cursor:pointer}
 .card.can-click::after{
   content:'';position:absolute;inset:-2px;pointer-events:none;z-index:5;
@@ -306,7 +306,7 @@ body::before{
 .johnny-name{font-size:.4rem;color:var(--danger)}
 .johnny-score-val{font-size:.35rem;color:var(--dim)}
 .johnny-status{font-size:.3rem;color:var(--orange);margin-left:auto}
-.johnny-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:2px}
+.johnny-grid{display:grid;gap:2px}
 .jc{
   width:24px;height:32px;display:flex;align-items:center;justify-content:center;
   border:1px solid rgba(180,50,50,.12);font-size:.35rem;
@@ -804,23 +804,26 @@ function makePool(){
 
 // Grid sizes: rows, cols per ante
 const GRID_SIZES=[
-  {r:4,c:4},{r:4,c:4}, // ante 1-2: 4x4
-  {r:4,c:4},{r:4,c:4}, // ante 3-4: 4x4
-  {r:4,c:4},{r:4,c:4}, // ante 5-6: 4x4
-  {r:4,c:4},{r:4,c:4}, // ante 7-8: 4x4
+  {r:2,c:2}, // ante 1: 2x2 (tutorial)
+  {r:2,c:3}, // ante 2: 2x3
+  {r:3,c:3}, // ante 3: 3x3
+  {r:3,c:4}, // ante 4: 3x4
+  {r:4,c:4}, // ante 5: 4x4
+  {r:4,c:4}, // ante 6: 4x4
+  {r:4,c:4}, // ante 7: 4x4
+  {r:4,c:4}, // ante 8: 4x4
 ];
 
-// Antes: target, discards (tosses), initial flips — all 4x4
-// Round ends when all cards face-up. Unlimited swaps, limited tosses.
+// Antes: target, discards (tosses), initial flips — scaled to grid size
 const ANTES=[
-  {s:{t:28,d:5,f:2},b:{t:22,d:4,f:2},x:{t:16,d:3,f:2}},
-  {s:{t:32,d:5,f:2},b:{t:26,d:4,f:2},x:{t:20,d:3,f:2}},
-  {s:{t:38,d:4,f:2},b:{t:30,d:3,f:2},x:{t:24,d:3,f:2}},
-  {s:{t:42,d:4,f:2},b:{t:34,d:3,f:2},x:{t:26,d:2,f:2}},
-  {s:{t:48,d:4,f:2},b:{t:38,d:3,f:2},x:{t:30,d:2,f:2}},
-  {s:{t:55,d:3,f:2},b:{t:44,d:3,f:2},x:{t:34,d:2,f:2}},
-  {s:{t:65,d:3,f:2},b:{t:52,d:2,f:2},x:{t:40,d:2,f:2}},
-  {s:{t:75,d:3,f:2},b:{t:60,d:2,f:2},x:{t:48,d:1,f:2}},
+  {s:{t:15,d:3,f:1},b:{t:12,d:2,f:1},x:{t:8,d:2,f:1}},   // 2x2 (4 cards)
+  {s:{t:20,d:3,f:1},b:{t:15,d:3,f:1},x:{t:10,d:2,f:1}},  // 2x3 (6 cards)
+  {s:{t:30,d:4,f:2},b:{t:24,d:3,f:2},x:{t:18,d:3,f:2}},  // 3x3 (9 cards)
+  {s:{t:40,d:5,f:2},b:{t:32,d:4,f:2},x:{t:24,d:3,f:2}},  // 3x4 (12 cards)
+  {s:{t:55,d:5,f:2},b:{t:45,d:4,f:2},x:{t:35,d:3,f:2}},  // 4x4 (16 cards)
+  {s:{t:65,d:5,f:2},b:{t:50,d:4,f:2},x:{t:40,d:3,f:2}},  // 4x4
+  {s:{t:75,d:5,f:2},b:{t:60,d:4,f:2},x:{t:48,d:3,f:2}},  // 4x4
+  {s:{t:85,d:5,f:2},b:{t:70,d:4,f:2},x:{t:55,d:3,f:2}},  // 4x4
 ];
 
 const BOSSES=[
@@ -1043,9 +1046,9 @@ function startRound(){
   // Seed toss pile with one card
   G.tossTop=G.deck.pop();
 
-  // Johnny's grid (4x4 = 16 cards, like player)
-  const JN=16;
-  G.johnny={grid:[],flip:[],n:JN,score:0};
+  // Johnny's grid matches player size
+  const JN=G.R*G.C;
+  G.johnny={grid:[],flip:[],n:JN,r:G.R,c:G.C,score:0};
   for(let i=0;i<JN;i++){G.johnny.grid[i]=G.deck.pop();G.johnny.flip[i]=i<2}
 
   const blindType=['small','big','boss'][G.bi];
@@ -1062,6 +1065,7 @@ function startRound(){
 /* ═══ JOHNNY — AI opponent ═══ */
 function buildJohnnyGrid(){
   const jg=$('j-grid');jg.innerHTML='';
+  jg.style.gridTemplateColumns=`repeat(${G.johnny.c},1fr)`;
   for(let i=0;i<G.johnny.n;i++){
     const c=document.createElement('div');c.className='jc';c.dataset.i=i;
     jg.appendChild(c);
@@ -1404,69 +1408,97 @@ function onGrid(r,c){
 }
 
 /* ═══ ELIMINATION — checks rows AND columns for: triple values, straights, shape match ═══ */
-function checkLines(){
-  if(G.boss&&G.boss.fx==='miser')return;
-  const toElim=new Set(); // store "r,c" strings
+/* ═══ ELIMINATION: partial lines, collapse, chain reactions ═══ */
 
-  // Gather all lines (rows and columns)
+// Find matches: contiguous runs of 3+ flipped non-eliminated cards in rows/columns
+function findMatches(){
+  if(G.boss&&G.boss.fx==='miser')return new Set();
+  const toElim=new Set();
   const lines=[];
-  // Columns
-  for(let c=0;c<G.C;c++){
-    const cells=[];for(let r=0;r<G.R;r++)cells.push([r,c]);
-    lines.push(cells);
-  }
-  // Rows
-  for(let r=0;r<G.R;r++){
-    const cells=[];for(let c=0;c<G.C;c++)cells.push([r,c]);
-    lines.push(cells);
-  }
+  for(let c=0;c<G.C;c++){const cells=[];for(let r=0;r<G.R;r++)cells.push([r,c]);lines.push(cells)}
+  for(let r=0;r<G.R;r++){const cells=[];for(let c=0;c<G.C;c++)cells.push([r,c]);lines.push(cells)}
 
   for(const line of lines){
-    // ALL cells in the line must be flipped and not eliminated
-    const allReady=line.every(([r,c])=>G.flip[r][c]&&!G.elim[r][c]);
-    if(!allReady)continue;
+    // Build contiguous runs of flipped, non-eliminated cells
+    const runs=[];let cur=[];
+    for(const[r,c]of line){
+      if(G.flip[r][c]&&!G.elim[r][c])cur.push([r,c]);
+      else{if(cur.length>=3)runs.push(cur);cur=[];}
+    }
+    if(cur.length>=3)runs.push(cur);
 
-    const cards=line.map(([r,c])=>G.grid[r][c]);
-    const vals=cards.map(cd=>cd.v);
-
-    let matched=false;
-    // All same value (full line)
-    if(vals.every(v=>v===vals[0])) matched=true;
-    // Full straight (all consecutive)
-    const sorted=[...vals].sort((a,b)=>a-b);
-    if(!matched && sorted.every((v,i)=>i===0||v===sorted[i-1]+1)) matched=true;
-
-    if(matched){
-      for(const [r,c] of line) toElim.add(r+','+c);
+    for(const run of runs){
+      // Check windows of exactly 3 within each run
+      for(let s=0;s<=run.length-3;s++){
+        const win=run.slice(s,s+3);
+        const vals=win.map(([r,c])=>G.grid[r][c].v);
+        let matched=false;
+        if(vals[0]===vals[1]&&vals[1]===vals[2])matched=true;
+        const sorted=[...vals].sort((a,b)=>a-b);
+        if(!matched&&sorted[1]===sorted[0]+1&&sorted[2]===sorted[1]+1)matched=true;
+        if(matched)for(const[r,c]of win)toElim.add(r+','+c);
+      }
+      // Also check full run if length > 3
+      if(run.length>3){
+        const vals=run.map(([r,c])=>G.grid[r][c].v);
+        if(vals.every(v=>v===vals[0]))for(const[r,c]of run)toElim.add(r+','+c);
+        const sorted=[...vals].sort((a,b)=>a-b);
+        if(sorted.every((v,i)=>i===0||v===sorted[i-1]+1))for(const[r,c]of run)toElim.add(r+','+c);
+      }
     }
   }
+  return toElim;
+}
 
-  if(toElim.size===0)return;
-
-  // Flash + eliminate
-  SFX.columnElim();
-  for(const key of toElim){
-    const [r,c]=key.split(',').map(Number);
-    $('g-grid').children[r*G.C+c].classList.add('col-flash');
+// Collapse grid: cards fall down within columns (gravity)
+function collapseGrid(){
+  for(let c=0;c<G.C;c++){
+    // Collect non-eliminated cards in this column (top to bottom)
+    const cards=[],flips=[];
+    for(let r=0;r<G.R;r++){
+      if(!G.elim[r][c]){cards.push(G.grid[r][c]);flips.push(G.flip[r][c])}
+    }
+    // Fill from bottom: empty slots at top
+    const empty=G.R-cards.length;
+    for(let r=0;r<G.R;r++){
+      if(r<empty){
+        G.elim[r][c]=true;G.grid[r][c]={v:0,s:'△'};G.flip[r][c]=false;
+      }else{
+        const i=r-empty;
+        G.grid[r][c]=cards[i];G.flip[r][c]=flips[i];G.elim[r][c]=false;
+      }
+    }
   }
-  for(const j of G.jokers){
-    if(j.elimBonus)G.ebon+=j.elimBonus;
-    if(j.elimMoney)G.money+=j.elimMoney;
-  }
+}
 
-  // Show elimination message
-  const elimMsg=$('q-elim-msg');
-  elimMsg.textContent='✨ '+toElim.size+' cards eliminated!';
-  setTimeout(()=>elimMsg.textContent='',3000);
+// Main: check + eliminate + collapse + chain
+function checkLines(){
+  const doChain=(iteration)=>{
+    const toElim=findMatches();
+    if(toElim.size===0)return;
 
-  setTimeout(()=>{
+    SFX.columnElim();
     for(const key of toElim){
-      const [r,c]=key.split(',').map(Number);
-      G.elim[r][c]=true;
+      const[r,c]=key.split(',').map(Number);
+      const el=$('g-grid').children[r*G.C+c];
+      if(el)el.classList.add('col-flash');
     }
-    floater($('g-grid').children[Math.floor(G.R/2)*G.C+Math.floor(G.C/2)],'✨ -'+toElim.size+'!','var(--green)');
-    sync();
-  },450);
+    for(const j of G.jokers){if(j.elimBonus)G.ebon+=j.elimBonus;if(j.elimMoney)G.money+=j.elimMoney}
+
+    const msg=$('q-elim-msg');
+    msg.textContent=(iteration>0?'🔥 Chain! ':'✨ ')+toElim.size+' eliminated!';
+    setTimeout(()=>msg.textContent='',3000);
+
+    setTimeout(()=>{
+      for(const key of toElim){const[r,c]=key.split(',').map(Number);G.elim[r][c]=true}
+      collapseGrid();
+      buildGrid();sync(); // rebuild DOM after collapse
+      floater($('g-grid').children[Math.min(Math.floor(G.R/2)*G.C+Math.floor(G.C/2),$('g-grid').children.length-1)],(iteration>0?'🔥 ':'✨ ')+'-'+toElim.size+'!','var(--green)');
+      // Chain: check again after collapse (max 5 iterations)
+      if(iteration<5)setTimeout(()=>doChain(iteration+1),300);
+    },450);
+  };
+  doChain(0);
 }
 
 function doChaos(){if(!G.boss||G.boss.fx!=='chaos')return;const fl=[];for(let r=0;r<G.R;r++)for(let c=0;c<G.C;c++)if(G.flip[r][c]&&!G.elim[r][c])fl.push([r,c]);shuffle(fl);for(let i=0;i<Math.min(2,fl.length);i++)G.flip[fl[i][0]][fl[i][1]]=false;sync()}
@@ -1524,6 +1556,124 @@ function floater(el,text,color){if(!el)return;const r=el.getBoundingClientRect()
 
 /* Reposition drawn slot on resize */
 window.addEventListener('resize',posDrawnSlot);
+
+/* ═══ SIMULATOR — headless level tester ═══ */
+function simRound(R,C,target,discards,seed){
+  seedRng(seed);
+  const deck=shuffle(makePool());
+  const grid=[],flip=[],elim=[];
+  for(let r=0;r<R;r++){grid[r]=[];flip[r]=[];elim[r]=[];for(let c=0;c<C;c++){grid[r][c]=deck.pop();flip[r][c]=false;elim[r][c]=false}}
+  // 2 initial flips
+  const pos=[];for(let r=0;r<R;r++)for(let c=0;c<C;c++)pos.push([r,c]);shuffle(pos);
+  flip[pos[0][0]][pos[0][1]]=true;flip[pos[1][0]][pos[1][1]]=true;
+  let tossTop=deck.pop();let tosses=discards;let turns=0;
+
+  // Simple bot strategy
+  const score=()=>{let s=0;for(let r=0;r<R;r++)for(let c=0;c<C;c++){if(elim[r][c])continue;if(flip[r][c])s+=grid[r][c].v}return s};
+  const hidden=()=>{let n=0;for(let r=0;r<R;r++)for(let c=0;c<C;c++)if(!flip[r][c]&&!elim[r][c])n++;return n};
+
+  // Check matches (simplified, no DOM)
+  const checkElim=()=>{
+    const te=new Set();const lines=[];
+    for(let c=0;c<C;c++){const cells=[];for(let r=0;r<R;r++)cells.push([r,c]);lines.push(cells)}
+    for(let r=0;r<R;r++){const cells=[];for(let c=0;c<C;c++)cells.push([r,c]);lines.push(cells)}
+    for(const line of lines){
+      const runs=[];let cur=[];
+      for(const[r,c]of line){if(flip[r][c]&&!elim[r][c])cur.push([r,c]);else{if(cur.length>=3)runs.push(cur);cur=[]}}
+      if(cur.length>=3)runs.push(cur);
+      for(const run of runs){
+        for(let s=0;s<=run.length-3;s++){
+          const w=run.slice(s,s+3),vals=w.map(([r,c])=>grid[r][c].v);
+          if(vals[0]===vals[1]&&vals[1]===vals[2]){for(const[r,c]of w)te.add(r+','+c)}
+          const so=[...vals].sort((a,b)=>a-b);
+          if(so[1]===so[0]+1&&so[2]===so[1]+1){for(const[r,c]of w)te.add(r+','+c)}
+        }
+      }
+    }
+    if(!te.size)return 0;
+    for(const k of te){const[r,c]=k.split(',').map(Number);elim[r][c]=true}
+    // Collapse
+    for(let c2=0;c2<C;c2++){
+      const cards=[],fl=[];
+      for(let r=0;r<R;r++)if(!elim[r][c2]){cards.push(grid[r][c2]);fl.push(flip[r][c2])}
+      const empty=R-cards.length;
+      for(let r=0;r<R;r++){if(r<empty){elim[r][c2]=true;grid[r][c2]={v:0,s:'△'};flip[r][c2]=false}else{const i=r-empty;grid[r][c2]=cards[i];flip[r][c2]=fl[i];elim[r][c2]=false}}
+    }
+    return te.size;
+  };
+
+  while(hidden()>0&&deck.length>0&&turns<200){
+    turns++;
+    // Bot: take toss if good (≤3), else draw blind
+    if(tossTop&&tossTop.v<=3){
+      // Take toss → swap with worst face-up card
+      let worst=-1,wv=-99;
+      for(let r=0;r<R;r++)for(let c=0;c<C;c++){if(flip[r][c]&&!elim[r][c]&&grid[r][c].v>wv){wv=grid[r][c].v;worst=r*C+c}}
+      if(worst>=0&&tossTop.v<wv){
+        const wr=Math.floor(worst/C),wc=worst%C;
+        const old=grid[wr][wc];grid[wr][wc]=tossTop;tossTop=old;
+      }else if(tosses>0){tossTop=tossTop;tosses--;
+        // flip a hidden
+        for(let r=0;r<R;r++)for(let c=0;c<C;c++){if(!flip[r][c]&&!elim[r][c]){flip[r][c]=true;break}}}
+    }else{
+      // Draw blind
+      if(!deck.length)break;
+      const drawn=deck.pop();
+      // Use if good (below avg of face-up)
+      let sum=0,cnt=0;
+      for(let r=0;r<R;r++)for(let c=0;c<C;c++){if(flip[r][c]&&!elim[r][c]){sum+=grid[r][c].v;cnt++}}
+      const avg=cnt?sum/cnt:5;
+      if(drawn.v<avg){
+        // Swap with worst
+        let worst=-1,wv=-99;
+        for(let r=0;r<R;r++)for(let c=0;c<C;c++){if(flip[r][c]&&!elim[r][c]&&grid[r][c].v>wv){wv=grid[r][c].v;worst=r*C+c}}
+        if(worst>=0){const wr=Math.floor(worst/C),wc=worst%C;const old=grid[wr][wc];grid[wr][wc]=drawn;tossTop=old}
+        else{tossTop=drawn}
+      }else if(tosses>0){
+        tossTop=drawn;tosses--;
+        for(let r=0;r<R;r++)for(let c=0;c<C;c++){if(!flip[r][c]&&!elim[r][c]){flip[r][c]=true;break}}
+      }else{
+        // Must use it - swap with worst
+        let worst=-1,wv=-99;
+        for(let r=0;r<R;r++)for(let c=0;c<C;c++){if(flip[r][c]&&!elim[r][c]&&grid[r][c].v>wv){wv=grid[r][c].v;worst=r*C+c}}
+        if(worst>=0){const wr=Math.floor(worst/C),wc=worst%C;const old=grid[wr][wc];grid[wr][wc]=drawn;tossTop=old}
+      }
+    }
+    // Check eliminations (with chain)
+    for(let ch=0;ch<5;ch++){if(!checkElim())break}
+  }
+  // Flip remaining
+  for(let r=0;r<R;r++)for(let c=0;c<C;c++)if(!flip[r][c]&&!elim[r][c])flip[r][c]=true;
+  for(let ch=0;ch<5;ch++){if(!checkElim())break}
+  const sc=score();
+  return{score:sc,won:sc<=target,turns,tosses};
+}
+
+function runSimulator(runs=100){
+  console.log('═══ SKYROGUE SIMULATOR ═══');
+  console.log(`Running ${runs} simulations per level...`);
+  const results=[];
+  for(let a=0;a<ANTES.length;a++){
+    const gs=GRID_SIZES[Math.min(a,GRID_SIZES.length-1)];
+    for(const bt of['s','b','x']){
+      const blind=ANTES[a][bt];
+      let wins=0,scores=[];
+      for(let i=0;i<runs;i++){
+        const r=simRound(gs.r,gs.c,blind.t,blind.d,i*1337+a*7+bt.charCodeAt(0));
+        if(r.won)wins++;scores.push(r.score);
+      }
+      const avg=(scores.reduce((a,b)=>a+b,0)/scores.length).toFixed(1);
+      const min=Math.min(...scores),max=Math.max(...scores);
+      const wr=((wins/runs)*100).toFixed(0);
+      const label=`Ante ${a+1} ${bt==='s'?'Small':bt==='b'?'Big':'Boss'} (${gs.r}x${gs.c})`;
+      results.push({label,target:blind.t,tosses:blind.d,winRate:wr+'%',avgScore:avg,min,max});
+      console.log(`${label}: target≤${blind.t} tosses=${blind.d} → win=${wr}% avg=${avg} [${min}..${max}]`);
+    }
+  }
+  console.table(results);
+  return results;
+}
+// Call from console: runSimulator(100)
 
 /* ── SOUND ENGINE ── */
 const SFX=(()=>{
